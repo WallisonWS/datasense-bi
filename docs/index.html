@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DataSense BI — Zero-Upload Browser CSV/JSON Analytics &amp; Pivot Studio</title>
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Inter',system-ui,sans-serif; background:#070b14; color:#f8fafc; min-height:100vh; padding:24px 18px; background-image:radial-gradient(circle at 15% 0%,rgba(16,185,129,0.12),transparent 40%),radial-gradient(circle at 85% 5%,rgba(56,189,248,0.12),transparent 40%); }
+    .wrap { max-width:1180px; margin:0 auto; }
+    .hdr { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; padding:22px 26px; border-radius:16px; background:linear-gradient(135deg,rgba(16,185,129,0.15),rgba(14,165,233,0.14)); border:1px solid rgba(16,185,129,0.35); margin-bottom:20px; }
+    .hdr h1 { font-size:1.6rem; font-weight:800; }
+    .hdr p { color:#94a3b8; font-size:0.9rem; margin-top:4px; }
+    .card { background:#101829; border:1px solid #22304a; border-radius:14px; padding:20px; margin-bottom:18px; }
+    .card h2 { font-size:0.98rem; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
+    .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin-bottom:18px; }
+    .kpi { background:#09101d; border:1px solid #1e2d45; border-radius:12px; padding:16px; }
+    .kpi small { color:#64748b; text-transform:uppercase; font-size:0.7rem; font-weight:700; display:block; margin-bottom:4px; }
+    .kpi strong { font-size:1.4rem; color:#34d399; font-family:Consolas,monospace; }
+    .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:18px; }
+    .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:12px; }
+    label { font-size:0.78rem; color:#94a3b8; font-weight:600; display:block; margin-bottom:4px; }
+    input, select, textarea { width:100%; background:#09101d; border:1px solid #22304a; color:#f1f5f9; border-radius:8px; padding:9px 11px; font-size:0.85rem; }
+    textarea { font-family:Consolas,monospace; font-size:0.8rem; }
+    .btn { background:linear-gradient(135deg,#10b981,#0ea5e9); color:#070b14; border:none; padding:8px 15px; border-radius:8px; font-weight:800; cursor:pointer; font-size:0.82rem; text-decoration:none; }
+    .btn-ghost { background:#09101d; color:#e2e8f0; border:1px solid #22304a; }
+    canvas { width:100%; height:270px; background:#09101d; border-radius:10px; border:1px solid #1e2d45; }
+    table { width:100%; border-collapse:collapse; font-size:0.82rem; }
+    th, td { padding:9px 11px; border-bottom:1px solid #1e293b; text-align:left; }
+    th { color:#94a3b8; text-transform:uppercase; font-size:0.71rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hdr">
+      <div>
+        <h1>📊 DataSense BI — Instant Zero-Upload Spreadsheet &amp; CSV Analytics</h1>
+        <p>Drop any CSV/JSON file (Sales, Finance, HR, Metrics) to generate instant KPIs, interactive charts, Pivot Group-By summaries &amp; clean exports — 100% locally in your browser.</p>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <a href="https://github.com/WallisonWS/datasense-bi" target="_blank" class="btn">⭐ Star on GitHub</a>
+        <a href="https://github.com/WallisonWS" target="_blank" class="btn btn-ghost">@WallisonWS</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>
+        <span>📥 Load CSV / JSON Dataset (Zero Server Upload)</span>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <input type="file" id="csvFile" accept=".csv,.json" style="width:auto; padding:6px;" />
+          <button class="btn btn-ghost" id="btnSampleSales">Preset: SaaS Sales</button>
+          <button class="btn" id="btnExportMd">📋 Copy Executive Markdown Report</button>
+        </div>
+      </h2>
+      <textarea id="rawData" rows="5"></textarea>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div><label>Group By (Category Column)</label><select id="selGroup"></select></div>
+        <div><label>Metric Column (Numeric)</label><select id="selMetric"></select></div>
+        <div><label>Aggregation</label>
+          <select id="selAgg">
+            <option value="sum">SUM (Total)</option>
+            <option value="avg">AVG (Average)</option>
+            <option value="count">COUNT (Records)</option>
+          </select>
+        </div>
+        <div><label>Search Filter</label><input id="filterTxt" placeholder="Filter rows..." /></div>
+      </div>
+      <div class="kpis" id="kpiGrid"></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>📈 Visual Chart (Aggregated by Category)</h2>
+        <canvas id="barCanvas" width="540" height="270"></canvas>
+      </div>
+      <div class="card">
+        <h2>🧮 Pivot Summary Table</h2>
+        <div style="overflow:auto; max-height:275px;">
+          <table><thead><tr><th>Category</th><th>Count</th><th>Sum</th><th>Average</th><th>Share %</th></tr></thead><tbody id="pivotBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SAMPLE_CSV = `month,region,category,revenue,deals,cost
+Jan,Brazil,Cloud SaaS,48500,14,12000
+Jan,USA,Enterprise,92000,6,21000
+Feb,Brazil,Cloud SaaS,56200,17,13500
+Feb,Europe,Security,74000,9,18000
+Mar,USA,Enterprise,118000,8,24000
+Mar,Brazil,Security,63400,11,15200
+Apr,Europe,Cloud SaaS,69800,15,16400
+Apr,LATAM,Support,31500,22,8200`;
+
+    let rows = [], headers = [], lastMd = '';
+
+    function parseDataset(text) {
+      const t = text.trim();
+      if (!t) return [];
+      if (t.startsWith('[')) return JSON.parse(t);
+      const lines = t.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) return [];
+      const cols = lines[0].split(',').map(c => c.trim());
+      return lines.slice(1).map(line => {
+        const vals = line.split(',').map(v => v.trim());
+        const o = {};
+        cols.forEach((c, i) => { const v = vals[i] ?? ''; o[c] = v !== '' && !isNaN(Number(v)) ? Number(v) : v; });
+        return o;
+      });
+    }
+
+    function loadText(text) {
+      document.getElementById('rawData').value = text;
+      try { rows = parseDataset(text); } catch { rows = []; }
+      if (!rows.length) return;
+      headers = Object.keys(rows[0]);
+      const numCols = headers.filter(h => rows.some(r => typeof r[h] === 'number'));
+      const catCols = headers.filter(h => !numCols.includes(h));
+
+      const sg = document.getElementById('selGroup'), sm = document.getElementById('selMetric');
+      sg.innerHTML = (catCols.length ? catCols : headers).map(c => `<option value="${c}">${c}</option>`).join('');
+      sm.innerHTML = (numCols.length ? numCols : headers).map(c => `<option value="${c}">${c}</option>`).join('');
+      if (catCols.includes('region')) sg.value = 'region';
+      if (numCols.includes('revenue')) sm.value = 'revenue';
+      renderDashboard();
+    }
+
+    function renderDashboard() {
+      const gCol = document.getElementById('selGroup').value;
+      const mCol = document.getElementById('selMetric').value;
+      const agg = document.getElementById('selAgg').value;
+      const q = document.getElementById('filterTxt').value.toLowerCase().trim();
+
+      const filtered = q ? rows.filter(r => JSON.stringify(r).toLowerCase().includes(q)) : rows;
+      const nums = filtered.map(r => Number(r[mCol])).filter(n => !isNaN(n));
+      const total = nums.reduce((a, b) => a + b, 0);
+      const avg = nums.length ? total / nums.length : 0;
+      const max = nums.length ? Math.max(...nums) : 0;
+
+      document.getElementById('kpiGrid').innerHTML = `
+        <div class="kpi"><small>Rows Analyzed</small><strong>${filtered.length}</strong></div>
+        <div class="kpi"><small>Total (${mCol})</small><strong>${total.toLocaleString('en-US', { maximumFractionDigits: 2 })}</strong></div>
+        <div class="kpi"><small>Average (${mCol})</small><strong>${avg.toLocaleString('en-US', { maximumFractionDigits: 2 })}</strong></div>
+        <div class="kpi"><small>Peak Value</small><strong>${max.toLocaleString('en-US', { maximumFractionDigits: 2 })}</strong></div>`;
+
+      const groups = {};
+      filtered.forEach(r => {
+        const k = String(r[gCol] ?? 'N/A');
+        if (!groups[k]) groups[k] = { count: 0, sum: 0 };
+        groups[k].count++;
+        const v = Number(r[mCol]);
+        if (!isNaN(v)) groups[k].sum += v;
+      });
+
+      const entries = Object.entries(groups).map(([k, v]) => ({
+        key: k, count: v.count, sum: v.sum, avg: v.sum / v.count,
+        val: agg === 'sum' ? v.sum : agg === 'avg' ? v.sum / v.count : v.count
+      })).sort((a, b) => b.val - a.val);
+
+      const grand = entries.reduce((a, e) => a + e.sum, 0) || 1;
+      document.getElementById('pivotBody').innerHTML = entries.map(e => `
+        <tr><td><strong>${e.key}</strong></td><td>${e.count}</td><td>${e.sum.toLocaleString('en-US',{maximumFractionDigits:1})}</td><td>${e.avg.toLocaleString('en-US',{maximumFractionDigits:1})}</td><td>${((e.sum/grand)*100).toFixed(1)}%</td></tr>
+      `).join('');
+
+      lastMd = `## DataSense BI Executive Summary (${mCol} by ${gCol})\n| ${gCol} | Count | Sum | Avg | Share |\n|---|---|---|---|---|\n` +
+        entries.map(e => `| ${e.key} | ${e.count} | ${e.sum.toFixed(2)} | ${e.avg.toFixed(2)} | ${((e.sum/grand)*100).toFixed(1)}% |`).join('\n');
+
+      // Draw crisp Canvas Bar Chart
+      const canvas = document.getElementById('barCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!entries.length) return;
+      const top = entries.slice(0, 7);
+      const maxVal = Math.max(...top.map(e => e.val), 1);
+      const padL = 26, padB = 42, padT = 26, chartH = canvas.height - padB - padT;
+      const barW = Math.min(58, (canvas.width - padL * 2) / top.length - 14);
+      const palette = ['#10b981', '#38bdf8', '#818cf8', '#f59e0b', '#ec4899', '#14b8a6', '#a855f7'];
+
+      top.forEach((e, i) => {
+        const x = padL + i * ((canvas.width - padL * 2) / top.length) + 8;
+        const h = Math.max(4, (e.val / maxVal) * chartH);
+        const y = padT + chartH - h;
+        ctx.fillStyle = palette[i % palette.length];
+        ctx.beginPath(); ctx.roundRect(x, y, barW, h, [6, 6, 0, 0]); ctx.fill();
+        ctx.fillStyle = '#e2e8f0'; ctx.font = '700 11px Consolas, monospace';
+        ctx.fillText(Math.round(e.val).toLocaleString(), x, y - 6);
+        ctx.fillStyle = '#94a3b8'; ctx.font = '600 11px system-ui';
+        ctx.fillText(e.key.slice(0, 9), x, canvas.height - 16);
+      });
+    }
+
+    document.getElementById('csvFile').addEventListener('change', e => {
+      const f = e.target.files[0]; if (!f) return;
+      f.text().then(loadText);
+    });
+    document.getElementById('rawData').addEventListener('input', e => loadText(e.target.value));
+    ['selGroup', 'selMetric', 'selAgg', 'filterTxt'].forEach(id => {
+      document.getElementById(id).addEventListener('change', renderDashboard);
+      document.getElementById(id).addEventListener('input', renderDashboard);
+    });
+    document.getElementById('btnSampleSales').addEventListener('click', () => loadText(SAMPLE_CSV));
+    document.getElementById('btnExportMd').addEventListener('click', () => navigator.clipboard.writeText(lastMd).then(() => alert('Executive Markdown report copied!')));
+    loadText(SAMPLE_CSV);
+  </script>
+</body>
+</html>
